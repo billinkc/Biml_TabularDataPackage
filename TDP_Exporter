@@ -1,0 +1,75 @@
+<!-- Currently only working with Mist -->
+<# 
+var sourceConnection = RootNode.DbConnections["CM_OLE"];
+
+var importResult = sourceConnection.ImportDB("", "", ImportOptions.ExcludeForeignKey | ImportOptions.ExcludeColumnDefault | ImportOptions.ExcludeViews);
+
+#>
+<Biml xmlns="http://schemas.varigence.com/biml.xsd">
+    <!--
+    TODO: 
+    For each table in the database, build a Data Flow, a Flat File Connection Manager and a Flat File Format file
+    DataFlow is trivial as is FFC.
+    FFF will require data type translations
+        
+    Advanced feature: specify a number to indicate
+    number of output buckets required
+    -->
+	<Connections>
+	<# foreach (var table in importResult.TableNodes) { #>
+		<FlatFileConnection FileFormat="FFF <#=table.Schema.SsisSafeName#>_<#=table.SsisSafeName#>" Name="FF <#=table.Schema.SsisSafeName#>_<#=table.SsisSafeName#>" FilePath="C:\ssisdata\TDP\<#=table.Schema.SsisSafeName#>_<#=table.SsisSafeName#>.csv"/>
+	<#} #>
+		</Connections>
+	<FileFormats>
+		<!--
+		TODO: Patch in http://bimlscript.com/Walkthrough/Details/2087
+		-->
+		<# foreach (var table in importResult.TableNodes) { #>
+		<FlatFileFormat 
+			Name="FFF <#=table.Schema.SsisSafeName#>_<#=table.SsisSafeName#>" 
+			ColumnNamesInFirstDataRow="true"
+			FlatFileType="Delimited"
+			HeaderRowDelimiter="Comma"
+			IsUnicode="true"
+		>
+			<Columns>
+	        <# //foreach (var column in table.Columns) 
+			   for(int index = 0; index < table.Columns.Count; index++){ 
+				   var column = table.Columns[index];#>
+				<Column Name="<#=column.SsisSafeName #>" 
+				DataType="<#=column.DataType#>"
+				Delimiter="<#=(index == (table.Columns.Count-1))? "CRLF":"Comma"#>"
+				Length="<#= column.Length #>"
+				Precision="<#= column.Precision #>"
+				Scale="<#= column.Scale #>"
+				/>
+				
+			<#} #>
+            </Columns>
+			
+        </FlatFileFormat>
+		<#} #>
+    </FileFormats>
+    <Packages>
+        <Package Name="TDP_Exporter">
+			<Tasks>
+		<# foreach (var table in importResult.TableNodes) { #>
+				<Dataflow 
+				Name="DFT <#=table.Schema.SsisSafeName#>_<#=table.SsisSafeName#>" 
+				>
+					<Transformations>
+						<OleDbSource ConnectionName="CM_OLE" Name="OLE_SRC <#=table.Schema.SsisSafeName#>_<#=table.SsisSafeName#>">
+							<ExternalTableInput Table="[<#=table.Schema.Name#>].[<#=table.Name#>]" />
+						</OleDbSource>
+						<FlatFileDestination ConnectionName="FF <#=table.Schema.SsisSafeName#>_<#=table.SsisSafeName#>" Name="FF <#=table.Schema.SsisSafeName#>_<#=table.SsisSafeName#>">
+						</FlatFileDestination>
+                    </Transformations>
+				<#
+				
+				#>
+				</Dataflow>
+		<#} #>
+            </Tasks>
+        </Package>
+    </Packages>
+</Biml>
